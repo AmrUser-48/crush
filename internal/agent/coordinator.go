@@ -48,7 +48,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/singleflight"
 
-	"charm.land/fantasy/providers/google"
+	"github.com/charmbracelet/crush/internal/gemini"
 	"charm.land/fantasy/providers/openai"
 	"charm.land/fantasy/providers/openaicompat"
 	openaisdk "github.com/charmbracelet/openai-go/option"
@@ -79,7 +79,7 @@ var (
 func servingProvider(providerCfg config.ProviderConfig, model catwalk.Model) string {
 	switch providerCfg.ID {
 	case string(catwalk.InferenceProviderGemini):
-		return google.Name
+		return gemini.Name
 	case hyper.Name:
 		return hyper.Name
 	}
@@ -623,7 +623,7 @@ func getProviderOptions(model Model, providerCfg config.ProviderConfig) fantasy.
 			}
 		}
 
-	case google.Name:
+	case gemini.Name:
 		_, hasReasoning := mergedOptions["thinking_config"]
 		if !hasReasoning {
 			if strings.HasPrefix(model.CatwalkCfg.ID, "gemini-2") {
@@ -638,9 +638,9 @@ func getProviderOptions(model Model, providerCfg config.ProviderConfig) fantasy.
 				}
 			}
 		}
-		parsed, err := google.ParseOptions(mergedOptions)
+		parsed, err := gemini.ParseOptions(mergedOptions)
 		if err == nil {
-			options[google.Name] = parsed
+			options[gemini.Name] = parsed
 		}
 
 	case openaicompat.Name, hyper.Name:
@@ -1269,18 +1269,18 @@ func (c *coordinator) buildOpenaiCompatProvider(baseURL, apiKey string, headers 
 }
 
 func (c *coordinator) buildGoogleProvider(baseURL, apiKey string, headers map[string]string) (fantasy.Provider, error) {
-	opts := []google.Option{
-		google.WithBaseURL(baseURL),
-		google.WithGeminiAPIKey(apiKey),
+	opts := []gemini.Option{
+		gemini.WithBaseURL(baseURL),
+		gemini.WithGeminiAPIKey(apiKey),
 	}
 	if c.cfg.Config().Options.Debug {
 		httpClient := log.NewHTTPClient()
-		opts = append(opts, google.WithHTTPClient(httpClient))
+		opts = append(opts, gemini.WithHTTPClient(httpClient))
 	}
 	if len(headers) > 0 {
-		opts = append(opts, google.WithHeaders(headers))
+		opts = append(opts, gemini.WithHeaders(headers))
 	}
-	return google.New(opts...)
+	return gemini.New(opts...)
 }
 
 func (c *coordinator) buildProvider(providerCfg config.ProviderConfig, model config.SelectedModel, isSubAgent bool, wireType catwalk.Type) (fantasy.Provider, error) {
