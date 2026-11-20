@@ -13,7 +13,7 @@ import (
 
 	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
-	"charm.land/fantasy/providers/google"
+	"github.com/charmbracelet/crush/internal/gemini"
 	"charm.land/fantasy/providers/openai"
 	"github.com/charmbracelet/crush/internal/stringext"
 	"github.com/charmbracelet/x/ansi"
@@ -694,7 +694,7 @@ func (m *Message) ToAIMessage() []fantasy.Message {
 				reasoningPart.ProviderOptions[openai.Name] = reasoning.ResponsesData
 			}
 			if reasoning.ThoughtSignature != "" {
-				reasoningPart.ProviderOptions[google.Name] = &google.ReasoningMetadata{
+				reasoningPart.ProviderOptions[gemini.Name] = &gemini.ReasoningMetadata{
 					Signature: reasoning.ThoughtSignature,
 					ToolID:    reasoning.ToolID,
 				}
