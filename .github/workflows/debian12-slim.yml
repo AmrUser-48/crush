@@ -82,7 +82,28 @@ jobs:
 
           go tool nm -size /tmp/crush-unstripped \
             | awk '$2 ~ /^[0-9]+$/ { print $2 "\t" $4 }' \
-            | sort -nr | head -n 60 > dist/largest-symbols.txt
+            | sort -nr > /tmp/crush-symbol-sizes.txt
+          head -n 60 /tmp/crush-symbol-sizes.txt > dist/largest-symbols.txt
+
+          {
+            echo
+            echo "Dependency chains for candidate large modules:"
+            for module in \
+              github.com/anthropics/anthropic-sdk-go \
+              github.com/aws/aws-sdk-go-v2 \
+              google.golang.org/genai \
+              github.com/go-git/go-git/v5 \
+              modernc.org/sqlite \
+              github.com/alecthomas/chroma/v2 \
+              github.com/itchyny/gojq \
+              github.com/disintegration/imaging \
+              github.com/andybalholm/brotli \
+              github.com/klauspost/compress; do
+              echo
+              echo "--- $module ---"
+              go mod why -m "$module" || true
+            done
+          } >> dist/build-info.txt
 
           SIZE="$(stat -c '%s' dist/crush)"
           LIMIT="$((100 * 1024 * 1024))"
