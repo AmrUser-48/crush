@@ -13,7 +13,6 @@ import (
 
 	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
-	"charm.land/fantasy/providers/anthropic"
 	"charm.land/fantasy/providers/google"
 	"charm.land/fantasy/providers/openai"
 	"github.com/charmbracelet/crush/internal/stringext"
@@ -691,11 +690,6 @@ func (m *Message) ToAIMessage() []fantasy.Message {
 		reasoning := m.ReasoningContent()
 		if reasoning.HasReplayData() {
 			reasoningPart := fantasy.ReasoningPart{Text: reasoning.Thinking, ProviderOptions: fantasy.ProviderOptions{}}
-			if reasoning.Signature != "" {
-				reasoningPart.ProviderOptions[anthropic.Name] = &anthropic.ReasoningOptionMetadata{
-					Signature: reasoning.Signature,
-				}
-			}
 			if reasoning.ResponsesData != nil {
 				reasoningPart.ProviderOptions[openai.Name] = reasoning.ResponsesData
 			}
