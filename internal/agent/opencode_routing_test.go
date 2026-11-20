@@ -18,38 +18,25 @@ func TestServingProvider(t *testing.T) {
 		return catwalk.Model{ID: "some-model", Type: modelType}
 	}
 
-	t.Run("bespoke SDKs are selected by provider ID", func(t *testing.T) {
+	t.Run("retained provider adapters", func(t *testing.T) {
 		t.Parallel()
 		for providerID, expected := range map[string]string{
-			string(catwalk.InferenceProviderBedrock):       "bedrock",
-			string(catwalk.InferenceProviderBedrockEurope): "bedrock",
-			string(catwalk.InferenceProviderAzure):         "azure",
-			string(catwalk.InferenceProviderGemini):        "google",
-			string(catwalk.InferenceProviderVertexAI):      "google",
-			string(catwalk.InferenceProviderOpenRouter):    "openrouter",
-			string(catwalk.InferenceProviderVercel):        "vercel",
-			"hyper":                                        "hyper",
+			string(catwalk.InferenceProviderGemini): "google",
+			"hyper":                               "hyper",
 		} {
 			require.Equal(t, expected, servingProvider(providerCfg(providerID, catwalk.TypeCompletions), model("")), providerID)
 		}
 	})
 
-	t.Run("generic providers are selected by the model's wire type", func(t *testing.T) {
+	t.Run("wire types", func(t *testing.T) {
 		t.Parallel()
 		for wireType, expected := range map[catwalk.Type]string{
 			catwalk.TypeResponses:   "openai",
-			catwalk.TypeMessages:    "anthropic",
+			catwalk.TypeMessages:    "",
 			catwalk.TypeCompletions: "openai-compat",
 		} {
 			require.Equal(t, expected, servingProvider(providerCfg("custom", ""), model(wireType)), wireType)
 			require.Equal(t, expected, servingProvider(providerCfg("custom", wireType), model("")), wireType)
-			for _, gateway := range []catwalk.InferenceProvider{
-				catwalk.InferenceProviderCopilot,
-				catwalk.InferenceProviderOpenCodeGo,
-				catwalk.InferenceProviderOpenCodeZen,
-			} {
-				require.Equal(t, expected, servingProvider(providerCfg(string(gateway), catwalk.TypeCompletions), model(wireType)), gateway)
-			}
 		}
 	})
 
@@ -77,7 +64,7 @@ func TestBuildProviderOpenCodeRouting(t *testing.T) {
 			}
 			coord := newTestCoordinator(t, env, providerID, providerCfg)
 
-			for _, wireType := range []catwalk.Type{catwalk.TypeCompletions, catwalk.TypeResponses, catwalk.TypeMessages} {
+			for _, wireType := range []catwalk.Type{catwalk.TypeCompletions, catwalk.TypeResponses} {
 				provider, err := coord.buildProvider(providerCfg, config.SelectedModel{
 					Model:    "some-model",
 					Provider: providerID,
@@ -85,6 +72,12 @@ func TestBuildProviderOpenCodeRouting(t *testing.T) {
 				require.NoError(t, err, wireType)
 				require.NotNil(t, provider, wireType)
 			}
+
+			_, err := coord.buildProvider(providerCfg, config.SelectedModel{
+				Model:    "messages-model",
+				Provider: providerID,
+			}, false, catwalk.TypeMessages)
+			require.Error(t, err)
 		})
 	}
 }
