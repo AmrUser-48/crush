@@ -102,7 +102,7 @@ jobs:
             echo "UPX archive: $(stat -c '%s bytes' dist/crush-upx-linux-amd64.tar.gz)"
             echo
             echo "SHA-256:"
-            sha256sum dist/crush dist/crush-linux-amd64.tar.gz
+            sha256sum dist/crush dist/crush-tiny dist/crush-upx dist/crush-linux-amd64.tar.gz dist/crush-tiny-linux-amd64.tar.gz dist/crush-upx-linux-amd64.tar.gz
             echo
             echo "ELF:"
             file dist/crush
@@ -153,24 +153,30 @@ jobs:
             done
           } >> dist/build-info.txt
 
-          SIZE="$(stat -c '%s' dist/crush)"
+          # The deliverable target is the tested UPX-packed executable.
+          # Keep uncompressed builds as recovery/debugging alternatives.
+          SIZE="$(stat -c '%s' dist/crush-upx)"
+          PLAIN_SIZE="$(stat -c '%s' dist/crush)"
+          TINY_SIZE="$(stat -c '%s' dist/crush-tiny)"
           LIMIT=20000000
           if (( SIZE < LIMIT )); then
             RESULT=PASS
           else
             RESULT=FAIL
-            echo "::warning::Stripped binary is ${SIZE} bytes; target is approximately 20 MB (${LIMIT} bytes)."
+            echo "::warning::Packed binary is ${SIZE} bytes; target is approximately 20 MB (${LIMIT} bytes)."
           fi
           {
             echo "result=${RESULT}"
-            echo "actual_bytes=${SIZE}"
+            echo "packed_bytes=${SIZE}"
+            echo "plain_bytes=${PLAIN_SIZE}"
+            echo "garble_tiny_bytes=${TINY_SIZE}"
             echo "target_bytes=${LIMIT}"
-            echo "actual_decimal_MB=$(awk -v n="${SIZE}" 'BEGIN { printf "%.2f", n/1000000 }')"
+            echo "packed_decimal_MB=$(awk -v n="${SIZE}" 'BEGIN { printf "%.2f", n/1000000 }')"
           } > dist/size-limit.txt
 
           cat dist/build-info.txt
           echo
-          echo "20 MB size target:"
+          echo "20 MB packed executable target:"
           cat dist/size-limit.txt
           echo
           echo "Largest linked symbols (size, type, address, symbol):"
