@@ -107,7 +107,7 @@ jobs:
             go version -m dist/crush-hard
             echo
             echo "Linked modules:"
-            go list -deps -f '{{if .Module}}{{.Module.Path}}' . | sort -u
+            go list -deps -f '{{if .Module}}{{.Module.Path}}{{end}}' . | sort -u
           } > dist/build-info.txt
 
           dpkg-deb --info dist/*.deb >> dist/build-info.txt
