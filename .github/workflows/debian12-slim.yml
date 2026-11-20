@@ -90,10 +90,14 @@ jobs:
             | awk '$2 ~ /^[0-9]+$/ { print $2 "\t" $3 "\t" $1 "\t" substr($0, index($0, $4)) }' \
             | sort -nr > /tmp/crush-symbol-sizes.txt
           head -n 100 /tmp/crush-symbol-sizes.txt > dist/largest-symbols.txt
-          awk -F '\t' '$2 ~ /^[Tt]$/ { print }' /tmp/crush-symbol-sizes.txt | head -n 80 > dist/largest-text-symbols.txt
-          awk -F '\t' '$2 ~ /^[Rr]$/ { print }' /tmp/crush-symbol-sizes.txt | head -n 80 > dist/largest-rodata-symbols.txt
-          awk -F '\t' '$2 ~ /^[Dd]$/ { print }' /tmp/crush-symbol-sizes.txt | head -n 80 > dist/largest-data-symbols.txt
-          awk -F '\t' '$2 ~ /^[Bb]$/ { print }' /tmp/crush-symbol-sizes.txt | head -n 80 > dist/largest-bss-symbols.txt
+          awk -F '\t' '$2 ~ /^[Tt]$/ { print }' /tmp/crush-symbol-sizes.txt > /tmp/crush-text-symbols.txt
+          awk -F '\t' '$2 ~ /^[Rr]$/ { print }' /tmp/crush-symbol-sizes.txt > /tmp/crush-rodata-symbols.txt
+          awk -F '\t' '$2 ~ /^[Dd]$/ { print }' /tmp/crush-symbol-sizes.txt > /tmp/crush-data-symbols.txt
+          awk -F '\t' '$2 ~ /^[Bb]$/ { print }' /tmp/crush-symbol-sizes.txt > /tmp/crush-bss-symbols.txt
+          sed -n '1,80p' /tmp/crush-text-symbols.txt > dist/largest-text-symbols.txt
+          sed -n '1,80p' /tmp/crush-rodata-symbols.txt > dist/largest-rodata-symbols.txt
+          sed -n '1,80p' /tmp/crush-data-symbols.txt > dist/largest-data-symbols.txt
+          sed -n '1,80p' /tmp/crush-bss-symbols.txt > dist/largest-bss-symbols.txt
 
           {
             echo
