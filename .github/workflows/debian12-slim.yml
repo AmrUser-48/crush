@@ -120,23 +120,23 @@ jobs:
           } >> dist/build-info.txt
 
           SIZE="$(stat -c '%s' dist/crush)"
-          LIMIT=100000000
+          LIMIT=20000000
           if (( SIZE < LIMIT )); then
             RESULT=PASS
           else
             RESULT=FAIL
-            echo "::warning::Stripped binary is ${SIZE} bytes; target is strictly below ${LIMIT} bytes."
+            echo "::warning::Stripped binary is ${SIZE} bytes; target is approximately 20 MB (${LIMIT} bytes)."
           fi
           {
             echo "result=${RESULT}"
             echo "actual_bytes=${SIZE}"
-            echo "limit_bytes=${LIMIT}"
+            echo "target_bytes=${LIMIT}"
             echo "actual_decimal_MB=$(awk -v n="${SIZE}" 'BEGIN { printf "%.2f", n/1000000 }')"
           } > dist/size-limit.txt
 
           cat dist/build-info.txt
           echo
-          echo "Size target:"
+          echo "20 MB size target:"
           cat dist/size-limit.txt
           echo
           echo "Largest linked symbols (size, type, address, symbol):"
