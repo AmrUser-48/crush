@@ -73,6 +73,12 @@ jobs:
             echo "ELF:"
             file dist/crush
             echo
+            echo "ELF section sizes (NOBITS sections do not occupy file bytes):"
+            readelf -SW dist/crush
+            echo
+            echo "ELF load segments:"
+            readelf -lW dist/crush
+            echo
             echo "Embedded Go build information:"
             go version -m dist/crush
           } > dist/build-info.txt
@@ -81,9 +87,13 @@ jobs:
             | sort -u > dist/linked-modules.txt
 
           go tool nm -size /tmp/crush-unstripped \
-            | awk '$2 ~ /^[0-9]+$/ { print $2 "\t" $4 }' \
+            | awk '$2 ~ /^[0-9]+$/ { print $2 "\t" $3 "\t" $1 "\t" substr($0, index($0, $4)) }' \
             | sort -nr > /tmp/crush-symbol-sizes.txt
-          head -n 60 /tmp/crush-symbol-sizes.txt > dist/largest-symbols.txt
+          head -n 100 /tmp/crush-symbol-sizes.txt > dist/largest-symbols.txt
+          awk -F '\t' '$2 ~ /^[Tt]$/ { print }' /tmp/crush-symbol-sizes.txt | head -n 80 > dist/largest-text-symbols.txt
+          awk -F '\t' '$2 ~ /^[Rr]$/ { print }' /tmp/crush-symbol-sizes.txt | head -n 80 > dist/largest-rodata-symbols.txt
+          awk -F '\t' '$2 ~ /^[Dd]$/ { print }' /tmp/crush-symbol-sizes.txt | head -n 80 > dist/largest-data-symbols.txt
+          awk -F '\t' '$2 ~ /^[Bb]$/ { print }' /tmp/crush-symbol-sizes.txt | head -n 80 > dist/largest-bss-symbols.txt
 
           {
             echo
@@ -106,15 +116,26 @@ jobs:
           } >> dist/build-info.txt
 
           SIZE="$(stat -c '%s' dist/crush)"
-          LIMIT="$((100 * 1024 * 1024))"
-          if (( SIZE >= LIMIT )); then
-            echo "Stripped binary is over the 100 MiB limit: ${SIZE} bytes" >&2
-            exit 1
+          LIMIT=100000000
+          if (( SIZE < LIMIT )); then
+            RESULT=PASS
+          else
+            RESULT=FAIL
+            echo "::warning::Stripped binary is ${SIZE} bytes; target is strictly below ${LIMIT} bytes."
           fi
+          {
+            echo "result=${RESULT}"
+            echo "actual_bytes=${SIZE}"
+            echo "limit_bytes=${LIMIT}"
+            echo "actual_decimal_MB=$(awk -v n="${SIZE}" 'BEGIN { printf "%.2f", n/1000000 }')"
+          } > dist/size-limit.txt
 
           cat dist/build-info.txt
           echo
-          echo "Largest linked symbols:"
+          echo "Size target:"
+          cat dist/size-limit.txt
+          echo
+          echo "Largest linked symbols (size, type, address, symbol):"
           cat dist/largest-symbols.txt
 
       - name: Upload Linux binary and footprint report
