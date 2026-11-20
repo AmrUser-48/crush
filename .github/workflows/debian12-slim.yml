@@ -55,7 +55,7 @@ jobs:
             -ldflags="-s -w -buildid= -X github.com/charmbracelet/crush/internal/version.Version=${VERSION}" \
             -o dist/crush .
 
-          tar -C dist -czf dist/crush-linux-amd64.tar.gz crush
+          tar -czf "$GITHUB_WORKSPACE/dist/crush-linux-amd64.tar.gz" -C "$GITHUB_WORKSPACE/dist" crush
 
           {
             echo "Commit: ${GITHUB_SHA}"
