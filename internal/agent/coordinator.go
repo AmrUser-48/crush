@@ -12,7 +12,6 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -420,9 +419,6 @@ func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, report *mess
 	}
 
 	mergedOptions, temp, topP, topK, freqPenalty, presPenalty := mergeCallOptions(model, providerCfg)
-
-	// Inject session_id for OpenRouter sticky routing (no-op for other providers).
-	injectOpenrouterSessionID(mergedOptions, sessionID)
 
 	if err := c.refreshTokenIfExpired(ctx, providerCfg); err != nil {
 		// NOTE(@andreynering): We don't return here because the event handling to ask the user to reauthenticate
@@ -1464,7 +1460,6 @@ func (c *coordinator) Summarize(ctx context.Context, sessionID string) error {
 	// Auth failures during summarize flow through fantasy's OnAuthRefresh,
 	// the same path used by regular turns.
 	opts := getProviderOptions(agent.Model(), providerCfg)
-	injectOpenrouterSessionID(opts, sessionID)
 	return agent.Summarize(ctx, sessionID, opts, c.makeAuthRefreshCallback(providerCfg))
 }
 
@@ -1654,7 +1649,6 @@ func (c *coordinator) subAgentCall(agent SessionAgent, sessionID, prompt string)
 	}
 
 	opts := getProviderOptions(model, providerCfg)
-	injectOpenrouterSessionID(opts, sessionID)
 
 	return SessionAgentCall{
 		SessionID:        sessionID,
