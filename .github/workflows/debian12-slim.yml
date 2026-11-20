@@ -44,7 +44,7 @@ jobs:
           echo "79cea8a50b6fa102d10c7b79a419cd77dead3cc2d78661de2dc5e5815dc505c1  /tmp/upx.tar.xz" | sha256sum -c -
           mkdir -p /tmp/upx
           tar -xJf /tmp/upx.tar.xz -C /tmp/upx
-          install "$(find /tmp/upx -type f -name upx -print -quit)" /usr/local/bin/upx
+          sudo install "$(find /tmp/upx -type f -name upx -print -quit)" /usr/local/bin/upx
           upx --version
 
       - name: Build stripped binary and collect size report
