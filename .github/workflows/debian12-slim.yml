@@ -33,6 +33,9 @@ jobs:
       - name: Verify Go modules
         run: go mod verify
 
+      - name: Test slim-build affected packages
+        run: go test ./internal/agent ./internal/message ./internal/event ./internal/shell
+
       - name: Install size-optimized Go linker
         run: go install mvdan.cc/garble@v0.18.0
 
