@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 	"regexp"
 	"slices"
 	"strconv"
