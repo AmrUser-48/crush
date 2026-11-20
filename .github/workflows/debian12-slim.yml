@@ -189,3 +189,11 @@ jobs:
           path: dist/
           if-no-files-found: error
           retention-days: 14
+
+      - name: Upload compact UPX executable
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: crush-debian12-linux-amd64-upx
+          path: dist/crush-upx-linux-amd64.tar.gz
+          if-no-files-found: error
+          retention-days: 14
