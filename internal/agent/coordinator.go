@@ -90,7 +90,7 @@ func servingProvider(providerCfg config.ProviderConfig, model catwalk.Model) str
 	case catwalk.TypeCompletions:
 		return openaicompat.Name
 	default:
-		return ""
+		return string(providerCfg.Type)
 	}
 }
 type Coordinator interface {
