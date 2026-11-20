@@ -36,6 +36,17 @@ jobs:
       - name: Install size-optimized Go linker
         run: go install mvdan.cc/garble@v0.18.0
 
+      - name: Install UPX
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://github.com/upx/upx/releases/download/v5.3.0/upx-5.3.0-amd64_linux.tar.xz -o /tmp/upx.tar.xz
+          echo "79cea8a50b6fa102d10c7b79a419cd77dead3cc2d78661de2dc5e5815dc505c1  /tmp/upx.tar.xz" | sha256sum -c -
+          mkdir -p /tmp/upx
+          tar -xJf /tmp/upx.tar.xz -C /tmp/upx
+          install "$(find /tmp/upx -type f -name upx -print -quit)" /usr/local/bin/upx
+          upx --version
+
       - name: Build stripped binary and collect size report
         shell: bash
         env:
@@ -64,6 +75,14 @@ jobs:
             -ldflags="-s -w -buildid= -X github.com/charmbracelet/crush/internal/version.Version=${VERSION}" .
           mv crush dist/crush-tiny
 
+          # Optional packed variant. Keep the uncompressed binaries as fallback.
+          cp dist/crush-tiny dist/crush-upx
+          upx --best --lzma dist/crush-upx
+          upx -t dist/crush-upx
+          ./dist/crush-upx --version
+
+          tar -czf "$GITHUB_WORKSPACE/dist/crush-upx-linux-amd64.tar.gz" -C "$GITHUB_WORKSPACE/dist" crush-upx
+
           tar -czf "$GITHUB_WORKSPACE/dist/crush-linux-amd64.tar.gz" -C "$GITHUB_WORKSPACE/dist" crush
 
           tar -czf "$GITHUB_WORKSPACE/dist/crush-tiny-linux-amd64.tar.gz" -C "$GITHUB_WORKSPACE/dist" crush-tiny
@@ -79,6 +98,8 @@ jobs:
             echo "Compressed archive: $(stat -c '%s bytes' dist/crush-linux-amd64.tar.gz)"
             echo "Garble tiny binary: $(stat -c '%s bytes' dist/crush-tiny)"
             echo "Garble tiny archive: $(stat -c '%s bytes' dist/crush-tiny-linux-amd64.tar.gz)"
+            echo "UPX binary: $(stat -c '%s bytes' dist/crush-upx)"
+            echo "UPX archive: $(stat -c '%s bytes' dist/crush-upx-linux-amd64.tar.gz)"
             echo
             echo "SHA-256:"
             sha256sum dist/crush dist/crush-linux-amd64.tar.gz
