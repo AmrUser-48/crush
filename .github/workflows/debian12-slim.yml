@@ -62,7 +62,7 @@ jobs:
           # sacrifices useful panic and stack-trace diagnostics.
           garble -tiny -seed=U0xJTTIwMjY= build -mod=readonly -trimpath -buildvcs=false \
             -ldflags="-s -w -buildid= -X github.com/charmbracelet/crush/internal/version.Version=${VERSION}" \
-            -o dist/crush-tiny .
+            -o=dist/crush-tiny .
 
           tar -czf "$GITHUB_WORKSPACE/dist/crush-linux-amd64.tar.gz" -C "$GITHUB_WORKSPACE/dist" crush
 
