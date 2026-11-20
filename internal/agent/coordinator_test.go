@@ -9,8 +9,6 @@ import (
 
 	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
-	"charm.land/fantasy/providers/anthropic"
-	"charm.land/fantasy/providers/bedrock"
 	"charm.land/fantasy/providers/openaicompat"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/discover"
@@ -517,43 +515,13 @@ func TestUpdateParentSessionCost(t *testing.T) {
 	})
 }
 
-func TestGetProviderOptionsReasoningEffort(t *testing.T) {
-	// Bedrock is Fantasy's Anthropic under a different provider name; options
-	// must land under anthropic.Name so the Anthropic language model picks them up.
-	tests := []struct {
-		name         string
-		providerType catwalk.Type
-	}{
-		{"anthropic honors reasoning_effort", catwalk.Type(anthropic.Name)},
-		{"bedrock honors reasoning_effort", catwalk.Type(bedrock.Name)},
+func TestGetProviderOptionsUnsupportedMessagesAPI(t *testing.T) {
+	model := Model{
+		CatwalkCfg: catwalk.Model{ID: "messages-model"},
+		ModelCfg:   config.SelectedModel{Provider: "custom", ReasoningEffort: "high"},
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			model := Model{
-				CatwalkCfg: catwalk.Model{
-					ID: "claude-opus-4-7",
-					Reasoning: catwalk.Reasoning{
-						Thinking:     catwalk.ThinkingToggleable,
-						EffortLevels: catwalk.NewEffortLevels("max"),
-					},
-				},
-				ModelCfg: config.SelectedModel{
-					Provider:        "test",
-					ReasoningEffort: "max",
-				},
-			}
-			providerCfg := config.ProviderConfig{ID: "test", Type: tc.providerType}
-
-			opts := getProviderOptions(model, providerCfg)
-
-			raw, ok := opts[anthropic.Name]
-			require.True(t, ok, "options should be keyed under anthropic.Name for type %q", tc.providerType)
-			parsed, ok := raw.(*anthropic.ProviderOptions)
-			require.True(t, ok)
-			require.NotNil(t, parsed.Effort)
-			assert.Equal(t, anthropic.Effort("max"), *parsed.Effort)
-		})
-	}
+	opts := getProviderOptions(model, config.ProviderConfig{ID: "custom", Type: catwalk.TypeMessages})
+	require.Empty(t, opts)
 }
 
 func TestIsUnauthorized(t *testing.T) {
@@ -788,11 +756,6 @@ func TestCallTopK(t *testing.T) {
 		{
 			name:        "passed through for openai-compat hosted providers",
 			providerCfg: config.ProviderConfig{ID: "zai", Type: openaicompat.Name},
-			want:        ptr(int64(40)),
-		},
-		{
-			name:        "passed through for anthropic",
-			providerCfg: config.ProviderConfig{ID: "anthropic", Type: catwalk.Type(anthropic.Name)},
 			want:        ptr(int64(40)),
 		},
 	}
