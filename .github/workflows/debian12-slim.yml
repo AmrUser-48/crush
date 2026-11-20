@@ -1,4 +1,4 @@
-name: Debian 12 slim build
+name: Debian 12 standard stripped build
 
 on:
   push:
@@ -9,12 +9,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: debian12-slim-${{ github.ref }}
+  group: crush-standard-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   linux-amd64:
-    name: Linux x86-64 (Core 2 compatible)
+    name: Standard stripped binary and Debian package
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -30,16 +30,12 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Verify Go modules
-        run: go mod verify
+      - name: Verify modules and test affected packages
+        run: |
+          go mod verify
+          go test ./internal/agent ./internal/message ./internal/event ./internal/shell
 
-      - name: Test slim-build affected packages
-        run: go test ./internal/agent ./internal/message ./internal/event ./internal/shell
-
-      - name: Install size-optimized Go linker
-        run: go install mvdan.cc/garble@v0.18.0
-
-      - name: Build stripped binary and collect size report
+      - name: Build standard stripped binary
         shell: bash
         env:
           CGO_ENABLED: "0"
@@ -52,43 +48,56 @@ jobs:
           mkdir -p dist
           VERSION="$(git describe --tags --always --dirty 2>/dev/null || git rev-parse --short HEAD)"
 
-          # Unstripped diagnostic build is kept only in the runner's /tmp.
-          go build -mod=readonly -trimpath -buildvcs=false \
-            -o /tmp/crush-unstripped .
-
-          # Release binary: no DWARF, symbol table, build ID, or source paths.
-          go build -mod=readonly -trimpath -buildvcs=false \
+          # Standard stripped build: strip symbols and DWARF, do not trim paths.
+          go build -mod=readonly -buildvcs=false \
             -ldflags="-s -w -buildid= -X github.com/charmbracelet/crush/internal/version.Version=${VERSION}" \
             -o dist/crush .
 
-          # Garble tiny mode removes more Go runtime metadata; it intentionally
-          # sacrifices useful panic and stack-trace diagnostics.
-          garble -tiny -seed=U0xJTTIwMjY= build -mod=readonly -trimpath -buildvcs=false \
-            -ldflags="-s -w -buildid= -X github.com/charmbracelet/crush/internal/version.Version=${VERSION}" .
-          mv crush dist/crush-tiny
+          ./dist/crush --version
+          ./dist/crush --help >/dev/null
 
-          tar -czf "$GITHUB_WORKSPACE/dist/crush-linux-amd64.tar.gz" -C "$GITHUB_WORKSPACE/dist" crush
+          PACKAGE_VERSION="$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || true)"
+          if [[ -z "${PACKAGE_VERSION}" ]]; then
+            PACKAGE_VERSION="0.0.0+git${GITHUB_SHA:0:12}"
+          else
+            DISTANCE="$(git rev-list --count "$(git describe --tags --abbrev=0)..HEAD")"
+            if [[ "${DISTANCE}" != "0" ]]; then
+              PACKAGE_VERSION="${PACKAGE_VERSION}+git${DISTANCE}.${GITHUB_SHA:0:7}"
+            fi
+          fi
 
-          tar -czf "$GITHUB_WORKSPACE/dist/crush-tiny-linux-amd64.tar.gz" -C "$GITHUB_WORKSPACE/dist" crush-tiny
+          PKGROOT="${RUNNER_TEMP}/crush-standard-pkg"
+          install -Dm755 dist/crush "${PKGROOT}/usr/bin/crush"
+          install -Dm644 LICENSE.md "${PKGROOT}/usr/share/doc/crush/copyright"
+          install -Dm644 README.md "${PKGROOT}/usr/share/doc/crush/README.md"
+          mkdir -p "${PKGROOT}/DEBIAN"
+          cat > "${PKGROOT}/DEBIAN/control" <<CONTROL
+          Package: crush
+          Version: ${PACKAGE_VERSION}
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: AmrUser-48 <66784815+AmrUser-48@users.noreply.github.com>
+          Description: Terminal-based AI assistant for developers
+           Standard stripped Crush build for Debian 12 and compatible systems.
+          CONTROL
+          dpkg-deb --build --root-owner-group "${PKGROOT}" "dist/crush_${PACKAGE_VERSION}_amd64.deb"
 
           {
             echo "Commit: ${GITHUB_SHA}"
             echo "Go: $(go version)"
             echo "Target: linux/amd64, GOAMD64=v1"
             echo "CGO_ENABLED=0"
-            echo
-            echo "Stripped binary: $(stat -c '%s bytes' dist/crush)"
-            echo "Unstripped binary: $(stat -c '%s bytes' /tmp/crush-unstripped)"
-            echo "Compressed archive: $(stat -c '%s bytes' dist/crush-linux-amd64.tar.gz)"
-            echo "Garble tiny binary: $(stat -c '%s bytes' dist/crush-tiny)"
-            echo "Garble tiny archive: $(stat -c '%s bytes' dist/crush-tiny-linux-amd64.tar.gz)"
+            echo "Build mode: standard stripped (-s -w; no -trimpath)"
+            echo "Binary bytes: $(stat -c '%s' dist/crush)"
+            echo "Binary decimal MB: $(awk -v n="$(stat -c '%s' dist/crush)" 'BEGIN { printf "%.2f", n/1000000 }')"
+            echo "Debian package: $(basename dist/*.deb)"
+            echo "Debian package bytes: $(stat -c '%s' dist/*.deb)"
             echo
             echo "SHA-256:"
-              echo
-            echo "ELF:"
-            file dist/crush
+            sha256sum dist/crush dist/*.deb
             echo
-            echo "ELF section sizes (NOBITS sections do not occupy file bytes):"
+            echo "ELF sections:"
             readelf -SW dist/crush
             echo
             echo "ELF load segments:"
@@ -96,57 +105,23 @@ jobs:
             echo
             echo "Embedded Go build information:"
             go version -m dist/crush
+            echo
+            echo "Linked modules:"
+            go list -deps -f '{{if .Module}}{{.Module.Path}}' . | sort -u
           } > dist/build-info.txt
 
-          go list -deps -f '{{if .Module}}{{.Module.Path}}{{end}}' . \
-            | sort -u > dist/linked-modules.txt
-
-          go tool nm -size /tmp/crush-unstripped \
-            | awk '$2 ~ /^[0-9]+$/ { print $2 "\t" $3 "\t" $1 "\t" substr($0, index($0, $4)) }' \
-            | sort -nr > /tmp/crush-symbol-sizes.txt
-          head -n 100 /tmp/crush-symbol-sizes.txt > dist/largest-symbols.txt
-          awk -F '\t' '$2 ~ /^[Tt]$/ { print }' /tmp/crush-symbol-sizes.txt > /tmp/crush-text-symbols.txt
-          awk -F '\t' '$2 ~ /^[Rr]$/ { print }' /tmp/crush-symbol-sizes.txt > /tmp/crush-rodata-symbols.txt
-          awk -F '\t' '$2 ~ /^[Dd]$/ { print }' /tmp/crush-symbol-sizes.txt > /tmp/crush-data-symbols.txt
-          awk -F '\t' '$2 ~ /^[Bb]$/ { print }' /tmp/crush-symbol-sizes.txt > /tmp/crush-bss-symbols.txt
-          sed -n '1,80p' /tmp/crush-text-symbols.txt > dist/largest-text-symbols.txt
-          sed -n '1,80p' /tmp/crush-rodata-symbols.txt > dist/largest-rodata-symbols.txt
-          sed -n '1,80p' /tmp/crush-data-symbols.txt > dist/largest-data-symbols.txt
-          sed -n '1,80p' /tmp/crush-bss-symbols.txt > dist/largest-bss-symbols.txt
-
-          {
-            echo
-            echo "Dependency chains for candidate large modules:"
-            for module in \
-              github.com/anthropics/anthropic-sdk-go \
-              github.com/aws/aws-sdk-go-v2 \
-              google.golang.org/genai \
-              github.com/go-git/go-git/v5 \
-              modernc.org/sqlite \
-              github.com/alecthomas/chroma/v2 \
-              github.com/itchyny/gojq \
-              github.com/disintegration/imaging \
-              github.com/andybalholm/brotli \
-              github.com/klauspost/compress; do
-              echo
-              echo "--- $module ---"
-              go mod why -m "$module" || true
-            done
-          } >> dist/build-info.txt
-
+          dpkg-deb --info dist/*.deb >> dist/build-info.txt
+          dpkg-deb --contents dist/*.deb >> dist/build-info.txt
 
           cat dist/build-info.txt
-          echo
-          echo "20 MB uncompressed executable target:"
-          cat dist/size-limit.txt
-          echo
-          echo "Largest linked symbols (size, type, address, symbol):"
-          cat dist/largest-symbols.txt
 
-      - name: Upload Linux binary and footprint report
+      - name: Upload standard binary and Debian package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: crush-debian12-linux-amd64
-          path: dist/
+          name: crush-debian12-standard-amd64
+          path: |
+            dist/crush
+            dist/*.deb
+            dist/build-info.txt
           if-no-files-found: error
           retention-days: 14
