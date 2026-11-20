@@ -36,7 +36,11 @@ func TestServingProvider(t *testing.T) {
 			catwalk.TypeCompletions: "openai-compat",
 		} {
 			require.Equal(t, expected, servingProvider(providerCfg("custom", ""), model(wireType)), wireType)
-			require.Equal(t, expected, servingProvider(providerCfg("custom", wireType), model("")), wireType)
+			configuredTypeExpected := expected
+			if wireType == catwalk.TypeMessages {
+				configuredTypeExpected = string(wireType)
+			}
+			require.Equal(t, configuredTypeExpected, servingProvider(providerCfg("custom", wireType), model("")), wireType)
 		}
 	})
 
