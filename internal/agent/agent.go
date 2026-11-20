@@ -1674,7 +1674,8 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, trigger string,
 	return qErr
 }
 
-
+func (a *sessionAgent) getCacheControlOptions() fantasy.ProviderOptions {
+	return fantasy.ProviderOptions{}
 }
 
 // sessionHeaders returns the HTTP headers we use for cache affinity on
