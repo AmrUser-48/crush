@@ -1,0 +1,127 @@
+name: Debian 12 hard-stripped build
+
+on:
+  push:
+    branches: [debian12-slim]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crush-hard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-amd64:
+    name: Hard-stripped binary and Debian package
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Go toolchain
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify modules and test affected packages
+        run: |
+          go mod verify
+          go test ./internal/agent ./internal/message ./internal/event ./internal/shell
+
+      - name: Build hard-stripped binary
+        shell: bash
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: amd64
+          GOAMD64: v1
+          GOEXPERIMENT: greenteagc
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          VERSION="$(git describe --tags --always --dirty 2>/dev/null || git rev-parse --short HEAD)"
+
+          # Hard-stripped build: remove source/build paths as well as symbols and DWARF.
+          go build -mod=readonly -trimpath -buildvcs=false \
+            -ldflags="-s -w -buildid= -X github.com/charmbracelet/crush/internal/version.Version=${VERSION}" \
+            -o dist/crush-hard .
+
+          ./dist/crush-hard --version
+          ./dist/crush-hard --help >/dev/null
+
+          PACKAGE_VERSION="$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || true)"
+          if [[ -z "${PACKAGE_VERSION}" ]]; then
+            PACKAGE_VERSION="0.0.0+git${GITHUB_SHA:0:12}"
+          else
+            DISTANCE="$(git rev-list --count "$(git describe --tags --abbrev=0)..HEAD")"
+            if [[ "${DISTANCE}" != "0" ]]; then
+              PACKAGE_VERSION="${PACKAGE_VERSION}+git${DISTANCE}.${GITHUB_SHA:0:7}"
+            fi
+          fi
+
+          PKGROOT="${RUNNER_TEMP}/crush-hard-pkg"
+          install -Dm755 dist/crush-hard "${PKGROOT}/usr/bin/crush-hard"
+          install -Dm644 LICENSE.md "${PKGROOT}/usr/share/doc/crush-hard/copyright"
+          install -Dm644 README.md "${PKGROOT}/usr/share/doc/crush-hard/README.md"
+          mkdir -p "${PKGROOT}/DEBIAN"
+          cat > "${PKGROOT}/DEBIAN/control" <<CONTROL
+          Package: crush-hard
+          Version: ${PACKAGE_VERSION}
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: AmrUser-48 <66784815+AmrUser-48@users.noreply.github.com>
+          Description: Hard-stripped terminal-based AI assistant for developers
+           Hard-stripped Crush build with Go path trimming enabled.
+          CONTROL
+          dpkg-deb --build --root-owner-group "${PKGROOT}" "dist/crush-hard_${PACKAGE_VERSION}_amd64.deb"
+
+          {
+            echo "Commit: ${GITHUB_SHA}"
+            echo "Go: $(go version)"
+            echo "Target: linux/amd64, GOAMD64=v1"
+            echo "CGO_ENABLED=0"
+            echo "Build mode: hard stripped (-trimpath -ldflags='-s -w')"
+            echo "Binary bytes: $(stat -c '%s' dist/crush-hard)"
+            echo "Binary decimal MB: $(awk -v n="$(stat -c '%s' dist/crush-hard)" 'BEGIN { printf "%.2f", n/1000000 }')"
+            echo "Debian package: $(basename dist/*.deb)"
+            echo "Debian package bytes: $(stat -c '%s' dist/*.deb)"
+            echo
+            echo "SHA-256:"
+            sha256sum dist/crush-hard dist/*.deb
+            echo
+            echo "ELF sections:"
+            readelf -SW dist/crush-hard
+            echo
+            echo "ELF load segments:"
+            readelf -lW dist/crush-hard
+            echo
+            echo "Embedded Go build information:"
+            go version -m dist/crush-hard
+            echo
+            echo "Linked modules:"
+            go list -deps -f '{{if .Module}}{{.Module.Path}}' . | sort -u
+          } > dist/build-info.txt
+
+          dpkg-deb --info dist/*.deb >> dist/build-info.txt
+          dpkg-deb --contents dist/*.deb >> dist/build-info.txt
+
+          cat dist/build-info.txt
+
+      - name: Upload hard-stripped binary and Debian package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: crush-debian12-hard-amd64
+          path: |
+            dist/crush-hard
+            dist/*.deb
+            dist/build-info.txt
+          if-no-files-found: error
+          retention-days: 14
