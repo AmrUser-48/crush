@@ -27,7 +27,7 @@ import (
 
 	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
-	"charm.land/fantasy/providers/google"
+	"github.com/charmbracelet/crush/internal/gemini"
 	"charm.land/fantasy/providers/openai"
 	"charm.land/lipgloss/v2"
 	"charm.land/tone"
@@ -1109,8 +1109,8 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			return a.messages.Update(genCtx, *currentAssistant)
 		},
 		OnReasoningEnd: func(id string, reasoning fantasy.ReasoningContent) error {
-			if googleData, ok := reasoning.ProviderMetadata[google.Name]; ok {
-				if reasoning, ok := googleData.(*google.ReasoningMetadata); ok {
+			if googleData, ok := reasoning.ProviderMetadata[gemini.Name]; ok {
+				if reasoning, ok := googleData.(*gemini.ReasoningMetadata); ok {
 					currentAssistant.AppendThoughtSignature(reasoning.Signature, reasoning.ToolID)
 				}
 			}
