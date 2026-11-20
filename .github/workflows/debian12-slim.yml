@@ -60,8 +60,9 @@ jobs:
 
           # Garble tiny mode removes more Go runtime metadata; it intentionally
           # sacrifices useful panic and stack-trace diagnostics.
-          garble -tiny -seed=U0xJTTIwMjY= -o=dist/crush-tiny build -mod=readonly -trimpath -buildvcs=false \
+          garble -tiny -seed=U0xJJTTIwMjY= build -mod=readonly -trimpath -buildvcs=false \
             -ldflags="-s -w -buildid= -X github.com/charmbracelet/crush/internal/version.Version=${VERSION}" .
+          mv crush dist/crush-tiny
 
           tar -czf "$GITHUB_WORKSPACE/dist/crush-linux-amd64.tar.gz" -C "$GITHUB_WORKSPACE/dist" crush
 
