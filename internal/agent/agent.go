@@ -28,12 +28,8 @@ import (
 
 	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
-	"charm.land/fantasy/providers/anthropic"
-	"charm.land/fantasy/providers/bedrock"
 	"charm.land/fantasy/providers/google"
 	"charm.land/fantasy/providers/openai"
-	"charm.land/fantasy/providers/openrouter"
-	"charm.land/fantasy/providers/vercel"
 	"charm.land/lipgloss/v2"
 	"charm.land/tone"
 	"github.com/charmbracelet/crush/internal/agent/hyper"
@@ -1114,12 +1110,6 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			return a.messages.Update(genCtx, *currentAssistant)
 		},
 		OnReasoningEnd: func(id string, reasoning fantasy.ReasoningContent) error {
-			// handle anthropic signature
-			if anthropicData, ok := reasoning.ProviderMetadata[anthropic.Name]; ok {
-				if reasoning, ok := anthropicData.(*anthropic.ReasoningOptionMetadata); ok {
-					currentAssistant.AppendReasoningSignature(reasoning.Signature)
-				}
-			}
 			if googleData, ok := reasoning.ProviderMetadata[google.Name]; ok {
 				if reasoning, ok := googleData.(*google.ReasoningMetadata); ok {
 					currentAssistant.AppendThoughtSignature(reasoning.Signature, reasoning.ToolID)
@@ -1242,7 +1232,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			}
 			usage, estimated := fallbackStepUsage(stepMessages, stepResult)
 			pricingModel := a.modelForStepCost(largeModel, stepResult.ProviderMetadata)
-			a.updateSessionUsage(pricingModel, &updatedSession, usage, a.openrouterCost(stepResult.ProviderMetadata), estimated)
+			a.updateSessionUsage(pricingModel, &updatedSession, usage, nil, estimated)
 			_, sessionErr := a.sessions.Save(ctx, updatedSession)
 			if sessionErr != nil {
 				return sessionErr
@@ -1610,12 +1600,6 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, trigger string,
 			return a.messages.Update(genCtx, summaryMessage)
 		},
 		OnReasoningEnd: func(id string, reasoning fantasy.ReasoningContent) error {
-			// Handle anthropic signature.
-			if anthropicData, ok := reasoning.ProviderMetadata["anthropic"]; ok {
-				if signature, ok := anthropicData.(*anthropic.ReasoningOptionMetadata); ok && signature.Signature != "" {
-					summaryMessage.AppendReasoningSignature(signature.Signature)
-				}
-			}
 			summaryMessage.FinishThinking()
 			return a.messages.Update(genCtx, summaryMessage)
 		},
@@ -1640,22 +1624,11 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, trigger string,
 		return err
 	}
 
-	var overrideCost *float64
 	for _, step := range resp.Steps {
 		summaryMessage.PrismModelID, summaryMessage.PrismModelName = extractPrismModel(step.ProviderMetadata)
 		summaryMessage.PrismHypercreditSavings, summaryMessage.PrismDollarSavings = extractPrismSavings(step.ProviderMetadata)
-		stepCost := a.openrouterCost(step.ProviderMetadata)
-		if stepCost != nil {
-			newCost := *stepCost
-			if overrideCost != nil {
-				newCost += *overrideCost
-			}
-			overrideCost = &newCost
-		}
 	}
-	if hyperCost := a.hyperStepsCost(largeModel, resp.Steps); hyperCost != nil {
-		overrideCost = hyperCost
-	}
+	overrideCost := a.hyperStepsCost(largeModel, resp.Steps)
 
 	// A compaction summary that stopped short is the record the session
 	// goes on reading from, so record and log why it is incomplete
@@ -1701,21 +1674,7 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, trigger string,
 	return qErr
 }
 
-func (a *sessionAgent) getCacheControlOptions() fantasy.ProviderOptions {
-	if t, _ := strconv.ParseBool(os.Getenv("CRUSH_DISABLE_ANTHROPIC_CACHE")); t {
-		return fantasy.ProviderOptions{}
-	}
-	return fantasy.ProviderOptions{
-		anthropic.Name: &anthropic.ProviderCacheControlOptions{
-			CacheControl: anthropic.CacheControl{Type: "ephemeral"},
-		},
-		bedrock.Name: &anthropic.ProviderCacheControlOptions{
-			CacheControl: anthropic.CacheControl{Type: "ephemeral"},
-		},
-		vercel.Name: &anthropic.ProviderCacheControlOptions{
-			CacheControl: anthropic.CacheControl{Type: "ephemeral"},
-		},
-	}
+
 }
 
 // sessionHeaders returns the HTTP headers we use for cache affinity on
@@ -2073,20 +2032,7 @@ func (a *sessionAgent) generateTitle(ctx context.Context, sessionID string, user
 	}
 
 	// Calculate usage and cost.
-	var overrideCost *float64
-	for _, step := range resp.Steps {
-		stepCost := a.openrouterCost(step.ProviderMetadata)
-		if stepCost != nil {
-			newCost := *stepCost
-			if overrideCost != nil {
-				newCost += *overrideCost
-			}
-			overrideCost = &newCost
-		}
-	}
-	if hyperCost := a.hyperStepsCost(model, resp.Steps); hyperCost != nil {
-		overrideCost = hyperCost
-	}
+	overrideCost := a.hyperStepsCost(model, resp.Steps)
 
 	cost := usageCost(model.CatwalkCfg.Pricing, resp.TotalUsage)
 
@@ -2111,19 +2057,6 @@ func (a *sessionAgent) generateTitle(ctx context.Context, sessionID string, user
 		return
 	}
 	titleSaved = true
-}
-
-func (a *sessionAgent) openrouterCost(metadata fantasy.ProviderMetadata) *float64 {
-	openrouterMetadata, ok := metadata[openrouter.Name]
-	if !ok {
-		return nil
-	}
-
-	opts, ok := openrouterMetadata.(*openrouter.ProviderMetadata)
-	if !ok {
-		return nil
-	}
-	return &opts.Usage.Cost
 }
 
 // extractPrismModel returns the ID and name of the model that actually
